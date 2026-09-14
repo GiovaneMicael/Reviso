@@ -13,11 +13,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@genkit-ai/googleai": "^1.28.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "firebase": "^12.18.0",
     "firebase-admin": "^13.5.0",
+    "genkit": "^1.42.0",
     "git-filter-repo": "^0.0.30",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
