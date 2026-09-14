@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.local
+
+.env
+.env.*
+
+firebase/functions/.env
+
+.DS_Store
+.vscode/
+.idea/
+*.log
+npm-debug.log*

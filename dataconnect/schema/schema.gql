@@ -1,0 +1,43 @@
+type User @table {
+  name: String!
+  email: String!
+  role: String!
+  schoolName: String
+}
+
+type EssayTheme @table {
+  title: String!
+  description: String!
+  releaseDate: Timestamp!
+  difficultyLevel: String
+}
+
+type Essay @table {
+  content: String!
+  status: String!
+  submittedAt: Timestamp!
+  totalScore: Float
+  feedbackSummary: String
+  author: User!
+  theme: EssayTheme!
+}
+
+type CompetencyScore @table {
+  competencyNumber: Int!
+  score: Float!
+  comment: String!
+  essay: Essay!
+}
+
+type LearningMaterial @table {
+  title: String!
+  category: String!
+  contentUrl: String!
+  difficultyLevel: String
+}
+
+type LearningPath @table {
+  status: String!
+  user: User!
+  material: LearningMaterial!
+}

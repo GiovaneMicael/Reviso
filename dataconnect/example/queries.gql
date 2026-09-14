@@ -1,0 +1,48 @@
+mutation CreateDemoData @transaction {
+  user_insertMany(data: [
+    {
+      id_expr: "auth.uid",
+      name: "John Doe",
+      email: "john@example.com",
+      role: "student"
+    }
+  ])
+  essayTheme_insertMany(data: [
+    {
+      title: "Climate Change",
+      description: "Discuss environmental impact",
+      releaseDate_expr: "request.time"
+    }
+  ])
+  essay_insert(data: {
+    content: "Global warming is a critical issue...",
+    status: "submitted",
+    submittedAt_expr: "request.time",
+    author: { id_expr: "auth.uid" },
+    theme: { id: "00000000-0000-0000-0000-000000000000" }
+  })
+}
+
+mutation UpdateUser($name: String!) @auth(level: USER) {
+  user_update(key: {id_expr: "auth.uid"}, data: {name: $name})
+}
+
+mutation DeleteEssay($id: UUID!) @auth(level: USER) {
+  essay_delete(id: $id)
+}
+
+query GetMyProfile @auth(level: USER) {
+  user(key: {id_expr: "auth.uid"}) {
+    name
+    email
+    role
+  }
+}
+
+query ListEssayThemes @auth(level: PUBLIC, insecureReason: "Publicly available essay themes for students.") {
+  essayThemes {
+    id
+    title
+    description
+  }
+}

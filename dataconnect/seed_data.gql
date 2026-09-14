@@ -1,0 +1,29 @@
+mutation SeedDatabase @transaction {
+  user_insertMany(data: [
+    { name: "Alice Smith", email: "alice@example.com", role: "Student" },
+    { name: "Bob Jones", email: "bob@example.com", role: "Teacher" },
+    { name: "Charlie Day", email: "charlie@example.com", role: "Student" }
+  ])
+  essayTheme_insertMany(data: [
+    { title: "Climate Change", description: "Discuss environmental impact", releaseDate: "2023-10-01T00:00:00Z" },
+    { title: "AI Ethics", description: "The morality of machines", releaseDate: "2023-11-01T00:00:00Z" },
+    { title: "History of Rome", description: "An analysis of the Empire", releaseDate: "2023-12-01T00:00:00Z" }
+  ])
+  essay_insertMany(data: [
+    { content: "Content of essay 1", status: "submitted", submittedAt: "2024-01-10T10:00:00Z", author: { id: "00000000-0000-0000-0000-000000000000" }, theme: { id: "00000000-0000-0000-0000-000000000000" } },
+    { content: "Content of essay 2", status: "draft", submittedAt: "2024-01-11T10:00:00Z", author: { id: "00000000-0000-0000-0000-000000000001" }, theme: { id: "00000000-0000-0000-0000-000000000001" } }
+  ])
+  competencyScore_insertMany(data: [
+    { competencyNumber: 1, score: 95.5, comment: "Excellent work", essay: { id: "00000000-0000-0000-0000-000000000000" } },
+    { competencyNumber: 2, score: 88.0, comment: "Good structure", essay: { id: "00000000-0000-0000-0000-000000000001" } }
+  ])
+  learningMaterial_insertMany(data: [
+    { title: "Introduction to Biology", category: "Science", contentUrl: "https://example.com/bio" },
+    { title: "Advanced Calculus", category: "Math", contentUrl: "https://example.com/math" },
+    { title: "World Literature", category: "Arts", contentUrl: "https://example.com/lit" }
+  ])
+  learningPath_insertMany(data: [
+    { status: "in-progress", user: { id: "00000000-0000-0000-0000-000000000000" }, material: { id: "00000000-0000-0000-0000-000000000000" } },
+    { status: "completed", user: { id: "00000000-0000-0000-0000-000000000002" }, material: { id: "00000000-0000-0000-0000-000000000001" } }
+  ])
+}
