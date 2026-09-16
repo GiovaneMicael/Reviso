@@ -7,7 +7,7 @@ if (!process.env.GEMINI_API_KEY) {
 
 export const ai = genkit({
   plugins: [googleAI({ apiKey: process.env.GEMINI_API_KEY })],
-  model: googleAI.model(process.env.GEMINI_MODEL || "gemini-2.5-flash"),
+  model: googleAI.model(process.env.GEMINI_MODEL || "gemini-3.6-flash"),
 });
 
 const NOTAS_VALIDAS = [0, 40, 80, 120, 160, 200];

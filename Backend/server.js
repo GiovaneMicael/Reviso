@@ -1,9 +1,15 @@
-import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { corrigirRedacaoFlow } from "./genkit.js";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, ".env") });
+
+// O Genkit lê GEMINI_API_KEY ao ser importado; por isso ele deve entrar
+// somente depois do dotenv carregar Backend/.env.
+const { corrigirRedacaoFlow } = await import("./genkit.js");
 
 let firestore = null;
 let firebaseAuth = null;
@@ -63,7 +69,7 @@ app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
     firebase: firebaseReady,
-    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
   });
 });
 
@@ -128,8 +134,6 @@ app.post("/api/correct", requireAuth, async (req, res) => {
     return res.status(502).json({ error: error.message || "Não foi possível corrigir a redação." });
   }
 });
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.resolve(__dirname, "../dist")));
