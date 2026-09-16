@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node backend/server.js",
+    "server": "node Backend/server.js",
     "dev:all": "concurrently -n BACKEND,FRONTEND -c blue,green \"npm:server\" \"npm:dev\"",
     "start": "cross-env NODE_ENV=production node backend/server.js",
     "build": "vite build",
