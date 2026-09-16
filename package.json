@@ -7,7 +7,7 @@
     "dev": "vite",
     "server": "node Backend/server.js",
     "dev:all": "concurrently -n BACKEND,FRONTEND -c blue,green \"npm:server\" \"npm:dev\"",
-    "start": "cross-env NODE_ENV=production node backend/server.js",
+    "start": "cross-env NODE_ENV=production node Backend/server.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
