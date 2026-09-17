@@ -1,5 +1,26 @@
 {
-  "functions": { "source": "firebase/functions", "runtime": "nodejs20" },
-  "firestore": { "rules": "firebase/firestore/firestore.rules" },
-  "storage": { "rules": "firebase/storage/storage.rules" }
+  "functions": {
+    "source": "firebase/functions",
+    "runtime": "nodejs20"
+  },
+  "firestore": {
+    "rules": "firebase/firestore/firestore.rules"
+  },
+  "storage": {
+    "rules": "firebase/storage/storage.rules"
+  },
+  "hosting": {
+    "public": "Reviso.com.br",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
 }
