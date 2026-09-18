@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
 } from "firebase/auth";
@@ -92,6 +94,11 @@ function App() {
       setAuthLoading(false);
       return undefined;
     }
+
+    getRedirectResult(auth).catch((error) => {
+      setAuthMessage(friendlyAuthError(error));
+    });
+
     return onAuthStateChanged(auth, async (current) => {
       setUser(current);
       setAuthLoading(false);
@@ -283,7 +290,15 @@ function AuthScreen({ screen, setScreen, message, setMessage, onBack }) {
     setBusy(true);
     try {
       if (!configured || !auth || !googleProvider) throw new Error("Firebase Auth ainda não foi configurado. Preencha o .env do frontend.");
-      await signInWithPopup(auth, googleProvider);
+
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        await signInWithRedirect(auth, googleProvider);
+        // A página recarrega e o resultado é tratado no useEffect do componente App
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (error) {
       setMessage(error.message?.startsWith("Firebase Auth") ? error.message : friendlyAuthError(error));
     } finally {
@@ -425,7 +440,7 @@ function Dashboard({ user, essays, setPage }) {
         </section>
 
         <section className="card insight-card">
-          <div className="section-head"><div><span className="eyebrow">Revisô Inteligente</span><h2>Seu próximo foco</h2></div><Icon name="spark" size={21} /></div>
+          <div className="section-head"><div><span className="eyebrow">Revisô Intelligence</span><h2>Seu próximo foco</h2></div><Icon name="spark" size={21} /></div>
           {last ? <FocusInsight essay={last} setPage={setPage} /> : (
             <div className="insight-empty"><div className="feature-icon"><Icon name="spark" /></div><h3>Seu diagnóstico começa aqui.</h3><p>Faça sua primeira correção para o Revisô identificar suas maiores oportunidades.</p><button className="btn btn-dark" onClick={() => setPage("correct")}>Começar análise</button></div>
           )}
