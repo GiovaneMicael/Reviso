@@ -352,11 +352,14 @@ function AuthScreen({ screen, setScreen, message, setMessage, onBack }) {
   );
 }
 
-function Field({ label, icon, ...props }) {
+function Field({ label, icon, onChange, ...props }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <div className="field-input"><Icon name={icon} size={18} /><input {...props} /></div>
+      <div className="field-input">
+        <Icon name={icon} size={18} />
+        <input {...props} onChange={(e) => onChange?.(e.target.value)} />
+      </div>
     </label>
   );
 }
