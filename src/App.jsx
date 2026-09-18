@@ -425,7 +425,7 @@ function Dashboard({ user, essays, setPage }) {
         </section>
 
         <section className="card insight-card">
-          <div className="section-head"><div><span className="eyebrow">Revisô Intelligence</span><h2>Seu próximo foco</h2></div><Icon name="spark" size={21} /></div>
+          <div className="section-head"><div><span className="eyebrow">Revisô Inteligente</span><h2>Seu próximo foco</h2></div><Icon name="spark" size={21} /></div>
           {last ? <FocusInsight essay={last} setPage={setPage} /> : (
             <div className="insight-empty"><div className="feature-icon"><Icon name="spark" /></div><h3>Seu diagnóstico começa aqui.</h3><p>Faça sua primeira correção para o Revisô identificar suas maiores oportunidades.</p><button className="btn btn-dark" onClick={() => setPage("correct")}>Começar análise</button></div>
           )}
