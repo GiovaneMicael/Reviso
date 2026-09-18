@@ -140,16 +140,20 @@ if (process.env.NODE_ENV === "production") {
   app.get("/{*splat}", (_req, res) => res.sendFile(path.resolve(__dirname, "../dist/index.html")));
 }
 
-const server = app.listen(port, () => console.log(`Revisô API em http://localhost:${port}`));
+if (!process.env.VERCEL) {
+  const server = app.listen(port, () => console.log(`Revisô API em http://localhost:${port}`));
 
-server.on("error", (error) => {
-  if (error.code === "EADDRINUSE") {
-    console.error(
-      `\n[ERRO] A porta ${port} já está em uso por outro processo.\n` +
-      `Feche o programa que está usando essa porta ou rode com outra porta, ex:\nPORT=3002 npm run server\n`
-    );
-  } else {
-    console.error("[ERRO] Falha ao iniciar o servidor backend:", error.message);
-  }
-  process.exit(1);
-});
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(
+        `\n[ERRO] A porta ${port} já está em uso por outro processo.\n` +
+        `Feche o programa que está usando essa porta ou rode com outra porta, ex:\nPORT=3002 npm run server\n`
+      );
+    } else {
+      console.error("[ERRO] Falha ao iniciar o servidor backend:", error.message);
+    }
+    process.exit(1);
+  });
+}
+
+export default app;
