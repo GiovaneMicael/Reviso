@@ -7,7 +7,7 @@ if (!process.env.GEMINI_API_KEY) {
 
 export const ai = genkit({
   plugins: [googleAI({ apiKey: process.env.GEMINI_API_KEY })],
-  model: googleAI.model(process.env.GEMINI_MODEL || "gemini-3.6-flash"),
+  model: googleAI.model(process.env.GEMINI_MODEL || "gemini-2.5-flash"),
 });
 
 const NOTAS_VALIDAS = [0, 40, 80, 120, 160, 200];
@@ -40,6 +40,22 @@ REDAÇÃO:
 ${texto}`;
 }
 
+async function generateComRetry(promptConfig, tentativas = 2) {
+  for (let i = 0; i <= tentativas; i++) {
+    try {
+      return await ai.generate(promptConfig);
+    } catch (error) {
+      const isUltimaTentativa = i === tentativas;
+      const isSobrecarga = error.status === "UNAVAILABLE" || error.code === 503;
+
+      if (!isSobrecarga || isUltimaTentativa) throw error;
+
+      console.warn(`Modelo indisponível (tentativa ${i + 1}/${tentativas + 1}), tentando novamente...`);
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (i + 1)));
+    }
+  }
+}
+
 export const corrigirRedacaoFlow = ai.defineFlow(
   {
     name: "corrigirRedacao",
@@ -50,7 +66,7 @@ export const corrigirRedacaoFlow = ai.defineFlow(
     outputSchema: CorrecaoSchema,
   },
   async ({ tema, texto }) => {
-    const { output } = await ai.generate({
+    const { output } = await generateComRetry({
       system: "Siga rigorosamente o formato JSON e os critérios da matriz ENEM.",
       prompt: promptFor(tema, texto),
       output: { schema: CorrecaoSchema },
