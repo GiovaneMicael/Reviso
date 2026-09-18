@@ -4,9 +4,5 @@
       "includeFiles": "backend/**"
     }
   },
-  "rewrites": [
-    { "source": "/(.*)",
-    "headers": { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popus" },
-      "destination": "/api" }
-    ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
 }
