@@ -313,8 +313,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
 .profile-grid { display: grid; grid-template-columns: 1fr 290px; gap: 15px; }
 .profile-main { padding: 26px; }
 .profile-hero { display: flex; align-items: center; gap: 17px; }
-.profile-hero h2 { font-size: 1.2rem; }
-.profile-hero p { color: var(--muted); font-size: .73rem; margin: 4px 0 8px; }
+.profile-hero > div { min-width: 0; flex: 1; }
+.profile-hero h2 { font-size: 1.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-hero p { color: var(--muted); font-size: .73rem; margin: 4px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .divider { height: 1px; background: var(--border); margin: 25px 0 7px; }
 .profile-form { max-width: 560px; }
 .profile-form .btn { margin-top: 19px; }
