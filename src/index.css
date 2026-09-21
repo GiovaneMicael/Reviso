@@ -150,6 +150,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
 .side-nav button.active { background: var(--primary-soft); color: var(--primary); }
 .sidebar-bottom { margin-top: auto; border-top: 1px solid var(--border); padding-top: 15px; }
 .profile-mini { width: 100%; display: grid; grid-template-columns: 32px 1fr 15px; gap: 9px; align-items: center; border: 0; background: transparent; text-align: left; padding: 7px 6px; border-radius: 10px; }
+.profile-mini > div { min-width: 0; overflow: hidden; }
 .profile-mini:hover { background: #f7f3fb; }
 .profile-mini b,.profile-mini span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-mini b { font-size: .72rem; color: var(--dark); }
