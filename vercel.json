@@ -4,5 +4,14 @@
       "includeFiles": "backend/**"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  "rewrites": [
+    {
+      "source": "/__/auth/:path*",
+      "destination": "https://reviso-5c5b5.firebaseapp.com/__/auth/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ]
 }
