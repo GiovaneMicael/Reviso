@@ -599,11 +599,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
   --surface: #211b2b;
   --surface-soft: #2a2335;
   --text: #f0ebf7;
-  --muted: #410e94ed;
+  --muted: #c4bfcd;
   --muted-2: #8e849d;
   --border: #3a3148;
-  --primary: #b69bff;
-  --primary-2: #c1aaff;
+  --primary: #4a2f92f1;
+  --primary-2: #5331b3e6;
   --primary-soft: #35284c;
   --dark: #603b97dc;
   --success: #71d6b1;
