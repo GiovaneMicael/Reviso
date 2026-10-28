@@ -12,7 +12,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider, configured } from "./lib/firebase";
 import { requestApi } from "./lib/api";
-import { useTheme, setTheme } from "./lib/theme";
+import { useTheme } from "./lib/theme";
 import Icon from "./components/Icon";
 import { TEMAS_ANTERIORES, EIXOS_PROVAVEIS, LIVROS_AUTORES, LEIS_DOCUMENTOS } from "./data/repertorio";
 import "./App.css";
@@ -1054,7 +1054,7 @@ function SupportTexts({ user, initialTema = "", onNavigate }) {
 const SUPPORT_EMAIL = "suporte.reviso@gmail.com";
 const WHATSAPP_DISPLAY = "(19) 92015-3237";
 const WHATSAPP_LINK = "https://wa.me/5519920153237?text=" + encodeURIComponent("Olá! Preciso de ajuda com o Revisô AI.");
-const BUG_SCREENS = ["Início", "Corrigir redação", "Histórico", "Plano de aulas", "Textos de apoio", "Perfil", "Login/cadastro", "Outra"];
+const BUG_SCREENS = ["Início", "Corrigir redação", "Histórico", "Plano de aulas", "Textos de apoio", "Configurações", "Perfil", "Login/cadastro", "Outra"];
 
 function mailtoBug({ titulo, tela, descricao, email }) {
   const body = `Tela: ${tela}\nUsuário: ${email || "não informado"}\nDispositivo: ${navigator.userAgent}\n\n${descricao}`.slice(0, 1500);
@@ -1062,11 +1062,12 @@ function mailtoBug({ titulo, tela, descricao, email }) {
 }
 
 function Settings({ user }) {
-  const [theme] = useTheme();
-  const [form, setForm] = useState({ tela: BUG_SCREENS[0], titulo: "", descricao: "" });
+  const [theme, changeTheme, themePreference] = useTheme();
+  const [form, setForm] = useState({ tela: "Configurações", titulo: "", descricao: "" });
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState("");
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const valid = form.titulo.trim().length >= 5 && form.descricao.trim().length >= 20;
@@ -1085,52 +1086,85 @@ function Settings({ user }) {
       setForm((f) => ({ ...f, titulo: "", descricao: "" }));
     } catch (error) {
       if (error.status === 501 || !error.status) {
-        // Servidor sem SMTP (ou fora do ar): abre o e-mail do aluno já preenchido.
         window.location.href = mailto;
         setStatus("info");
         setMessage("Abrimos seu aplicativo de e-mail com o relato pronto. É só enviar.");
       } else {
         setStatus("error");
-        setMessage(error.message);
+        setMessage(error.message || "Não foi possível enviar o relato. Tente novamente.");
       }
     }
   }
 
   async function copyNumber() {
     try {
-      await navigator.clipboard.writeText(WHATSAPP_DISPLAY);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(WHATSAPP_DISPLAY);
+      } else {
+        const field = document.createElement("textarea");
+        field.value = WHATSAPP_DISPLAY;
+        field.setAttribute("readonly", "");
+        field.style.position = "fixed";
+        field.style.opacity = "0";
+        document.body.appendChild(field);
+        field.select();
+        const didCopy = document.execCommand?.("copy");
+        field.remove();
+        if (!didCopy) throw new Error("Cópia indisponível");
+      }
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* área de transferência indisponível */ }
+      setCopyFeedback("Número copiado para a área de transferência.");
+      window.setTimeout(() => setCopied(false), 2200);
+    } catch {
+      setCopied(false);
+      setCopyFeedback(`Não foi possível copiar automaticamente. Número: ${WHATSAPP_DISPLAY}`);
+    }
   }
+
+  const themeOptions = [
+    ["system", "Automático", "spark", "Acompanha o tema do seu dispositivo."],
+    ["light", "Modo claro", "sun", "Uma interface clara para estudar durante o dia."],
+    ["dark", "Modo escuro", "moon", "Conforto visual em ambientes com pouca luz."],
+  ];
 
   return (
     <div className="settings-page page-enter">
-      <section className="page-heading"><div><span className="eyebrow"><Icon name="settings" size={14} /> Preferências</span><h1>Configurações.</h1><p>Ajuste a aparência do Revisô e fale com a nossa equipe quando precisar.</p></div></section>
+      <section className="settings-intro">
+        <div>
+          <span className="eyebrow"><Icon name="settings" size={14} /> Seu espaço, do seu jeito</span>
+          <h1>Configurações<span>.</span></h1>
+          <p>Personalize a aparência ou encontre ajuda da equipe Revisô.</p>
+        </div>
+        <div className="settings-account"><span className="settings-account-icon"><Icon name="shield" size={18} /></span><div><b>Conta conectada</b><small>{user.email}</small></div></div>
+      </section>
 
-      <section className="card settings-section">
-        <header><span className="eyebrow">Modo de tela</span><h2>Tema</h2><p>Escolha entre o modo claro e o modo escuro. A preferência fica salva neste dispositivo.</p></header>
-        <div className="theme-options-row">
-          {[["light", "Modo claro", "sun"], ["dark", "Modo escuro", "moon"]].map(([id, label, icon]) => (
-            <button key={id} type="button" className={`theme-card ${id}`} aria-pressed={theme === id} onClick={() => setTheme(id)}>
+      <section className="card settings-section appearance-section">
+        <header className="settings-section-heading"><div className="settings-section-icon appearance-icon"><Icon name="sun" size={19} /></div><div><span className="eyebrow">Aparência</span><h2>Escolha seu tema</h2><p>A preferência fica salva neste dispositivo e pode ser alterada quando quiser.</p></div></header>
+        <div className="theme-options-row" role="group" aria-label="Preferência de tema">
+          {themeOptions.map(([id, label, icon, description]) => (
+            <button key={id} type="button" className={`theme-card ${id} ${themePreference === id ? "selected" : ""}`} aria-pressed={themePreference === id} onClick={() => changeTheme(id)}>
+              <div className="theme-card-top"><span className="theme-option-icon"><Icon name={icon} size={18} /></span>{themePreference === id && <span className="theme-active"><Icon name="check" size={13} /> Ativo</span>}</div>
               <div className="preview" aria-hidden="true"><i /><div><i /><i /></div></div>
-              <span className="label"><Icon name={icon} size={18} /> {label}{theme === id && <small>Ativo</small>}</span>
+              <span className="label">{label}</span><small className="theme-description">{description}</small>
             </button>
           ))}
         </div>
+        <p className="theme-current" aria-live="polite">{themePreference === "system" ? `Aparência atual: modo ${theme === "dark" ? "escuro" : "claro"}, conforme seu dispositivo.` : `Modo ${theme === "dark" ? "escuro" : "claro"} selecionado.`}</p>
       </section>
 
-      <section className="card settings-section">
-        <header><span className="eyebrow">Suporte</span><h2>Precisa de ajuda?</h2><p>Relate um problema ou fale com a gente pelo WhatsApp.</p></header>
+      <section className="settings-support-section">
+        <header className="settings-section-heading support-heading"><div className="settings-section-icon support-icon"><Icon name="chat" size={19} /></div><div><span className="eyebrow">Estamos por perto</span><h2>Ajuda e suporte</h2><p>Encontre respostas rápidas ou envie um relato diretamente à equipe.</p></div></header>
         <div className="settings-grid">
           <div className="support-box">
-            <h3><Icon name="chat" size={18} /> Central de ajuda</h3>
-            <p>Atendimento pelo WhatsApp:</p>
+            <div className="support-box-title"><span className="support-box-icon"><Icon name="chat" size={17} /></span><div><h3>Fale com a gente</h3><p>Nosso canal de atendimento direto.</p></div></div>
             <span className="wa-number">{WHATSAPP_DISPLAY}</span>
             <div className="bug-actions">
               <a className="btn btn-whatsapp" href={WHATSAPP_LINK} target="_blank" rel="noopener noreferrer"><Icon name="chat" size={16} /> Abrir WhatsApp</a>
               <button type="button" className="btn btn-secondary" onClick={copyNumber}><Icon name={copied ? "check" : "copy"} size={16} /> {copied ? "Copiado" : "Copiar número"}</button>
             </div>
+            {copyFeedback && <p className="copy-feedback" role="status">{copyFeedback}</p>}
+            <div className="support-divider" />
+            <div className="faq-heading"><div><b>Respostas rápidas</b><small>Talvez sua dúvida já esteja aqui.</small></div><Icon name="book" size={17} /></div>
             <div className="faq">
               <details><summary>Como favorito uma redação?</summary><p>No Histórico, toque na estrela da redação. Ela passa a aparecer em Meus Destaques, no seu perfil.</p></details>
               <details><summary>Como gero o plano de aulas?</summary><p>Em Plano de aulas, escolha a redação e toque em Gerar plano. Ele fica salvo para você rever depois.</p></details>
@@ -1139,15 +1173,15 @@ function Settings({ user }) {
             </div>
           </div>
 
-          <form className="support-box" onSubmit={sendBug}>
-            <h3><Icon name="bug" size={18} /> Relatar um bug</h3>
-            <p>O relato é enviado por e-mail para {SUPPORT_EMAIL}.</p>
+          <form className="support-box report-box" onSubmit={sendBug}>
+            <div className="support-box-title"><span className="support-box-icon bug-icon"><Icon name="bug" size={17} /></span><div><h3>Relatar um problema</h3><p>Conte o que aconteceu para podermos corrigir.</p></div></div>
+            <div className="report-note"><Icon name="shield" size={15} /><span>Seu relato inclui a tela e o navegador para facilitar a investigação.</span></div>
             <label className="field plain"><span>Onde aconteceu?</span><select value={form.tela} onChange={set("tela")}>{BUG_SCREENS.map((t) => <option key={t}>{t}</option>)}</select></label>
             <label className="field plain"><span>Título</span><input value={form.titulo} onChange={set("titulo")} maxLength={120} placeholder="Ex.: A nota não aparece no histórico" /></label>
-            <label className="field plain"><span>O que aconteceu?</span><textarea value={form.descricao} onChange={set("descricao")} maxLength={3000} placeholder="Descreva o que você fez, o que esperava e o que aconteceu (mínimo 20 caracteres)." /></label>
+            <label className="field plain"><span>O que aconteceu?</span><textarea value={form.descricao} onChange={set("descricao")} maxLength={3000} placeholder="Descreva o que você fez, o que esperava e o que aconteceu (mínimo 20 caracteres)." /><small className={`field-counter ${form.descricao.length < 20 ? "needs-more" : ""}`}>{form.descricao.length}/3000 {form.descricao.length < 20 && "· mínimo 20 caracteres"}</small></label>
             <div className="bug-actions">
-              <button className="btn btn-primary" disabled={!valid || status === "loading"}>{status === "loading" ? <><span className="spinner" /> Enviando...</> : <><Icon name="mail" size={16} /> Enviar relato</>}</button>
-              <a className="text-btn" href={mailto}>Abrir no meu e-mail</a>
+              <button type="submit" className="btn btn-primary" disabled={!valid || status === "loading"}>{status === "loading" ? <><span className="spinner" /> Enviando...</> : <><Icon name="mail" size={16} /> Enviar relato</>}</button>
+              <a className="text-btn" href={mailto}><Icon name="arrow" size={14} /> Abrir no meu e-mail</a>
             </div>
             {message && <div className={`alert ${status === "success" ? "success" : status === "error" ? "error" : "info-note"}`} role="status">{message}</div>}
           </form>
