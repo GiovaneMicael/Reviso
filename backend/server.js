@@ -9,7 +9,7 @@ dotenv.config({ path: path.join(__dirname, ".env") });
 
 // O Genkit lê GEMINI_API_KEY ao ser importado; por isso ele deve entrar
 // somente depois do dotenv carregar Backend/.env.
-const { corrigirRedacaoFlow } = await import("./genkit.js");
+const { corrigirRedacaoFlow, planoAulasFlow, textosApoioFlow, sugerirTemasFlow } = await import("./genkit.js");
 
 let firestore = null;
 let firebaseAuth = null;
@@ -43,6 +43,29 @@ if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && proc
 const app = express();
 const port = Number(process.env.PORT || 3001);
 const memoryEssays = new Map();
+const memorySupport = new Map();
+
+// Camadas de acesso: Firestore quando configurado, memória em desenvolvimento.
+const userCol = (uid, name) => firestore.collection("usuarios").doc(uid).collection(name);
+
+async function getEssay(uid, id) {
+  if (firestore) {
+    const doc = await userCol(uid, "redacoes").doc(String(id)).get();
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+  }
+  return (memoryEssays.get(uid) || []).find((e) => String(e.id) === String(id)) || null;
+}
+
+async function patchEssay(uid, id, data) {
+  if (firestore) {
+    await userCol(uid, "redacoes").doc(String(id)).update(data);
+    return;
+  }
+  const list = memoryEssays.get(uid) || [];
+  memoryEssays.set(uid, list.map((e) => (String(e.id) === String(id) ? { ...e, ...data } : e)));
+}
+
+const cleanTheme = (value = "") => String(value).replace(/\s+/g, " ").trim().slice(0, 200);
 
 app.use(cors({
   origin: process.env.FRONTEND_ORIGIN || true,
@@ -108,6 +131,7 @@ app.post("/api/correct", requireAuth, async (req, res) => {
       ...result,
       tema: tema || "Sem tema",
       texto,
+      favorito: false,
       createdAt: new Date().toISOString(),
     };
 
@@ -132,6 +156,110 @@ app.post("/api/correct", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(502).json({ error: error.message || "Não foi possível corrigir a redação." });
+  }
+});
+
+
+app.patch("/api/essays/:id/favorite", requireAuth, async (req, res) => {
+  try {
+    const essay = await getEssay(req.user.uid, req.params.id);
+    if (!essay) return res.status(404).json({ error: "Redação não encontrada." });
+    const favorito = Boolean(req.body?.favorito);
+    await patchEssay(req.user.uid, req.params.id, { favorito });
+    return res.json({ id: req.params.id, favorito });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Não foi possível atualizar o favorito." });
+  }
+});
+
+app.post("/api/essays/:id/plan", requireAuth, async (req, res) => {
+  try {
+    const essay = await getEssay(req.user.uid, req.params.id);
+    if (!essay) return res.status(404).json({ error: "Redação não encontrada." });
+    if (essay.plano && !req.body?.force) return res.json(essay.plano);
+    if (!essay.texto) {
+      return res.status(400).json({ error: "Esta redação foi salva antes do texto ser guardado. Corrija-a novamente para gerar o plano." });
+    }
+
+    const plano = await planoAulasFlow({
+      tema: essay.tema || "",
+      texto: essay.texto,
+      correcao: {
+        notaTotal: essay.notaTotal,
+        competencias: essay.competencias,
+        positivos: essay.positivos || [],
+        melhorar: essay.melhorar || [],
+        geral: essay.geral || "",
+      },
+    });
+
+    await patchEssay(req.user.uid, req.params.id, { plano });
+    return res.json(plano);
+  } catch (error) {
+    console.error(error);
+    return res.status(502).json({ error: error.message || "Não foi possível gerar o plano de aulas." });
+  }
+});
+
+app.post("/api/themes", requireAuth, async (req, res) => {
+  try {
+    const eixo = cleanTheme(req.body?.eixo);
+    const evitar = Array.isArray(req.body?.evitar) ? req.body.evitar.slice(0, 20).map(cleanTheme) : [];
+    const result = await sugerirTemasFlow({ eixo, evitar });
+    return res.json(result);
+  } catch (error) {
+    console.error(error);
+    return res.status(502).json({ error: error.message || "Não foi possível sugerir temas." });
+  }
+});
+
+app.get("/api/support-texts", requireAuth, async (req, res) => {
+  try {
+    if (firestore) {
+      const snapshot = await userCol(req.user.uid, "apoios").orderBy("createdAt", "desc").limit(50).get();
+      return res.json(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    }
+    return res.json(memorySupport.get(req.user.uid) || []);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Não foi possível carregar seus textos de apoio." });
+  }
+});
+
+app.post("/api/support-texts", requireAuth, async (req, res) => {
+  const tema = cleanTheme(req.body?.tema);
+  if (tema.length < 8) return res.status(400).json({ error: "Informe um tema com pelo menos 8 caracteres." });
+
+  try {
+    const result = await textosApoioFlow({ tema });
+    const item = { tema, textos: result.textos, createdAt: new Date().toISOString() };
+
+    if (firestore) {
+      const ref = await userCol(req.user.uid, "apoios").add({ ...item, createdAt: new Date() });
+      item.id = ref.id;
+    } else {
+      item.id = String(Date.now());
+      memorySupport.set(req.user.uid, [item, ...(memorySupport.get(req.user.uid) || [])].slice(0, 50));
+    }
+    return res.json(item);
+  } catch (error) {
+    console.error(error);
+    return res.status(502).json({ error: error.message || "Não foi possível gerar os textos de apoio." });
+  }
+});
+
+app.delete("/api/support-texts/:id", requireAuth, async (req, res) => {
+  try {
+    if (firestore) {
+      await userCol(req.user.uid, "apoios").doc(String(req.params.id)).delete();
+    } else {
+      memorySupport.set(req.user.uid, (memorySupport.get(req.user.uid) || []).filter((x) => String(x.id) !== String(req.params.id)));
+    }
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Não foi possível excluir." });
   }
 });
 

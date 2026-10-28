@@ -13,6 +13,7 @@ import {
 import { auth, googleProvider, configured } from "./lib/firebase";
 import { requestApi } from "./lib/api";
 import Icon from "./components/Icon";
+import { TEMAS_ANTERIORES, EIXOS_PROVAVEIS, LIVROS_AUTORES, LEIS_DOCUMENTOS } from "./data/repertorio";
 import "./App.css";
 
 const COMP_NAMES = {
@@ -49,10 +50,17 @@ function scoreMeta(score) {
   return { label: "Vamos evoluir", tone: "danger" };
 }
 
+function toDate(value) {
+  if (!value) return null;
+  // Firestore serializa Timestamp como { _seconds } ou { seconds }
+  const seconds = value._seconds ?? value.seconds;
+  const date = seconds != null ? new Date(seconds * 1000) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function formatDate(value) {
-  if (!value) return "Data não disponível";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Data não disponível";
+  const date = toDate(value);
+  if (!date) return "Data não disponível";
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 }
 
@@ -72,7 +80,10 @@ function normalizeEssay(item) {
       nome: c.nome || COMP_NAMES[c.n ?? c.numero] || `Competência ${c.n ?? c.numero}`,
       comentario: c.comentario || c.justificativa || "",
     })),
-    date: item.date || item.createdAt || item.created_at || new Date().toISOString(),
+    date: toDate(item.date || item.createdAt || item.created_at)?.toISOString() || new Date().toISOString(),
+    texto: item.texto || "",
+    favorito: Boolean(item.favorito),
+    plano: item.plano || null,
     positivos: item.positivos || [],
     melhorar: item.melhorar || [],
     geral: item.geral || item.diagnostico_geral || "",
@@ -86,8 +97,10 @@ function App() {
   const [authScreen, setAuthScreen] = useState("login");
   const [authMessage, setAuthMessage] = useState("");
   const [essays, setEssays] = useState([]);
-  const [selectedEssay, setSelectedEssay] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [draftTema, setDraftTema] = useState("");
+  const selectedEssay = essays.find((e) => e.id === selectedId) || null;
 
   useEffect(() => {
     if (!auth) {
@@ -127,6 +140,28 @@ function App() {
     setEssays((prev) => [normalized, ...prev.filter((e) => e.id !== normalized.id)]);
   }
 
+  // Navegação única: opcionalmente leva um tema para a próxima tela (ex.: do repertório para a correção).
+  function navigate(next, tema = "") {
+    setDraftTema(tema);
+    setPage(next);
+    setSidebarOpen(false);
+  }
+
+  function updateEssay(id, patch) {
+    setEssays((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }
+
+  async function toggleFavorite(essay) {
+    const next = !essay.favorito;
+    updateEssay(essay.id, { favorito: next });
+    try {
+      const token = await user.getIdToken();
+      await requestApi(`/api/essays/${essay.id}/favorite`, { method: "PATCH", body: JSON.stringify({ favorito: next }) }, token);
+    } catch {
+      updateEssay(essay.id, { favorito: !next });
+    }
+  }
+
   if (authLoading) return <Splash />;
 
   if (!user) {
@@ -148,7 +183,7 @@ function App() {
     <div className="app-shell">
       <Sidebar
         page={page}
-        setPage={(next) => { setPage(next); setSidebarOpen(false); }}
+        setPage={navigate}
         user={user}
         onLogout={handleLogout}
         open={sidebarOpen}
@@ -159,19 +194,20 @@ function App() {
           page={page}
           user={user}
           onMenu={() => setSidebarOpen(true)}
-          onProfile={() => setPage("profile")}
+          onProfile={() => navigate("profile")}
         />
         <div className="page-container">
-          {page === "home" && <Dashboard user={user} essays={essays} setPage={setPage} />}
-          {page === "correct" && <Correction user={user} onSave={saveEssay} />}
+          {page === "home" && <Dashboard user={user} essays={essays} setPage={navigate} />}
+          {page === "correct" && <Correction key={draftTema} user={user} onSave={saveEssay} initialTema={draftTema} onNavigate={navigate} />}
           {page === "history" && (
-            <History essays={essays} onView={(e) => setSelectedEssay(e)} setPage={setPage} />
+            <History essays={essays} onView={(e) => setSelectedId(e.id)} onToggleFav={toggleFavorite} setPage={navigate} />
           )}
-          {page === "lessons" && <LessonPlan essays={essays} setPage={setPage} />}
-          {page === "profile" && <Profile user={user} essays={essays} />}
+          {page === "lessons" && <LessonPlan user={user} essays={essays} onEssayUpdate={updateEssay} setPage={navigate} />}
+          {page === "support" && <SupportTexts key={draftTema} user={user} initialTema={draftTema} onNavigate={navigate} />}
+          {page === "profile" && <Profile user={user} essays={essays} onView={(e) => setSelectedId(e.id)} onToggleFav={toggleFavorite} setPage={navigate} />}
         </div>
       </main>
-      {selectedEssay && <EssayModal essay={selectedEssay} onClose={() => setSelectedEssay(null)} />}
+      {selectedEssay && <EssayModal essay={selectedEssay} onToggleFav={toggleFavorite} onClose={() => setSelectedId(null)} />}
     </div>
   );
 }
@@ -370,6 +406,7 @@ function Sidebar({ page, setPage, user, onLogout, open, setOpen }) {
     ["correct", "Corrigir redação"],
     ["history", "Histórico"],
     ["lessons", "Plano de aulas"],
+    ["support", "Textos de apoio"],
   ];
   return (
     <>
@@ -384,14 +421,12 @@ function Sidebar({ page, setPage, user, onLogout, open, setOpen }) {
           <span className="nav-label">Workspace</span>
           {primary.map(([id, label]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
-              <Icon name={id === "correct" ? "pen" : id} size={19} /> <span>{label}</span>
+              <Icon name={{ correct: "pen", support: "library" }[id] || id} size={19} /> <span>{label}</span>
             </button>
           ))}
-          <span className="nav-label account">Conta</span>
-          <button className={page === "profile" ? "active" : ""} onClick={() => setPage("profile")}><Icon name="user" size={19} /><span>Meu perfil</span></button>
         </nav>
         <div className="sidebar-bottom">
-          <button className="profile-mini" onClick={() => setPage("profile")}>
+          <button className={`profile-mini ${page === "profile" ? "active" : ""}`} onClick={() => setPage("profile")}>
             <div className="avatar">{initials(user)}</div>
             <div><b>{user.displayName || "Aluno Revisô"}</b><span>{user.email}</span></div>
             <Icon name="chevron" size={15} />
@@ -404,7 +439,7 @@ function Sidebar({ page, setPage, user, onLogout, open, setOpen }) {
 }
 
 function Topbar({ page, user, onMenu, onProfile }) {
-  const titles = { home: "Visão geral", correct: "Corrigir redação", history: "Histórico", lessons: "Plano de aulas", profile: "Meu perfil" };
+  const titles = { home: "Visão geral", correct: "Corrigir redação", history: "Histórico", lessons: "Plano de aulas", support: "Textos de apoio", profile: "Meu perfil" };
   return (
     <header className="topbar">
       <button className="icon-btn menu-btn" onClick={onMenu}><Icon name="menu" /></button>
@@ -466,7 +501,7 @@ function StatCard({ icon, label, value, suffix, hint }) {
 
 function RecentEssay({ essay }) {
   const meta = scoreMeta(Number(essay.notaTotal));
-  return <div className="recent-essay"><div className="recent-score"><strong>{essay.notaTotal}</strong><span>/ 1000</span></div><div className="recent-info"><span className={`tag ${meta.tone}`}>{meta.label}</span><h3>{essay.tema || "Sem tema"}</h3><p>{formatDate(essay.date)}</p></div><Icon name="chevron" size={20} /></div>;
+  return <div className="recent-essay"><div className="recent-score"><strong>{essay.notaTotal}</strong><span>/ 1000</span></div><div className="recent-info"><span className={`tag ${meta.tone}`}>{meta.label}</span><h3>{essay.tema || "Sem tema"}</h3><p>{formatDate(essay.date)}</p></div></div>;
 }
 
 function FocusInsight({ essay, setPage }) {
@@ -479,16 +514,18 @@ function EmptyState({ setPage }) {
   return <div className="empty-state"><div className="empty-icon"><Icon name="pen" size={25} /></div><h3>Seu histórico começa com uma redação.</h3><p>Envie um texto e receba uma análise detalhada das cinco competências.</p><button className="btn btn-primary" onClick={() => setPage("correct")}>Corrigir primeira redação</button></div>;
 }
 
-function Correction({ user, onSave }) {
-  const [tema, setTema] = useState("");
+function Correction({ user, onSave, initialTema = "", onNavigate }) {
+  const [tema, setTema] = useState(initialTema);
   const [texto, setTexto] = useState("");
   const [status, setStatus] = useState("idle");
+  const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState(null);
   const words = texto.trim().split(/\s+/).filter(Boolean).length;
 
   async function submit() {
     if (words < 30) return;
     setStatus("loading");
+    setErrorMsg("");
     try {
       const token = await user.getIdToken();
       const essay = await requestApi("/api/correct", { method: "POST", body: JSON.stringify({ tema, texto }) }, token);
@@ -497,6 +534,7 @@ function Correction({ user, onSave }) {
       await onSave(normalized);
       setStatus("done");
     } catch (error) {
+      setErrorMsg(error.message || "Não foi possível analisar agora.");
       setStatus("error");
       setResult(null);
     }
@@ -515,17 +553,60 @@ function Correction({ user, onSave }) {
       <section className="page-heading"><div><span className="eyebrow"><Icon name="spark" size={14} /> Laboratório de escrita</span><h1>Corrija. Entenda. Reescreva.</h1><p>Envie sua redação e receba uma leitura estruturada segundo as cinco competências do ENEM.</p></div></section>
       <div className="correction-layout">
         <section className="card editor-card">
-          <div className="editor-head"><div><span className="step-badge">01</span><div><b>Contexto</b><small>Ajude a IA a entender sua proposta.</small></div></div></div>
+          <div className="editor-head"><div><span className="step-badge">01</span><div><b>Contexto</b><small>Escreva seu próprio tema ou deixe a IA sugerir.</small></div></div></div>
           <label className="field plain"><span>Tema da redação <small>opcional</small></span><input value={tema} onChange={(e) => setTema(e.target.value)} placeholder="Digite o tema proposto" /></label>
+          <ThemeSuggester user={user} onPick={setTema} />
+          {tema.trim().length >= 8 && (
+            <button type="button" className="text-btn support-link" onClick={() => onNavigate("support", tema.trim())}><Icon name="library" size={15} /> Gerar textos de apoio para este tema</button>
+          )}
           <label className="field plain"><span>Sua redação</span><textarea value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Comece a escrever ou cole sua redação aqui..." /></label>
           <div className="editor-footer"><span className={words < 30 ? "word-count warning-text" : "word-count"}>{words} palavras {words < 30 && "· mínimo 30"}</span><button className="btn btn-primary" onClick={submit} disabled={status === "loading" || words < 30}>{status === "loading" ? <><span className="spinner" /> Analisando...</> : <><Icon name="spark" size={17} /> Analisar com IA</>}</button></div>
-          {status === "error" && <div className="alert error">Não foi possível analisar agora. Verifique se a API está ativa e se o Firebase Admin/Gemini estão configurados.</div>}
+          {status === "error" && <div className="alert error">{errorMsg}</div>}
         </section>
         <aside className="card editor-aside">
           <div className="aside-icon"><Icon name="shield" /></div><h3>Seu texto, seu diagnóstico.</h3><p>A análise considera cada competência separadamente e transforma as lacunas encontradas em próximos passos de estudo.</p>
           <div className="aside-list">{["C1 · Norma-padrão", "C2 · Tema e repertório", "C3 · Argumentação", "C4 · Coesão", "C5 · Intervenção"].map((x) => <span key={x}><Icon name="check" size={14} /> {x}</span>)}</div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+// Sugestão automática de temas: nunca substitui o tema escrito pelo aluno, só oferece opções clicáveis.
+function ThemeSuggester({ user, onPick }) {
+  const [options, setOptions] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function suggest() {
+    setBusy(true);
+    setError("");
+    try {
+      const token = await user.getIdToken();
+      const data = await requestApi("/api/themes", { method: "POST", body: JSON.stringify({ eixo: "", evitar: options.map((o) => o.tema) }) }, token);
+      setOptions(data.temas || []);
+    } catch (e) {
+      setError(e.message || "Não foi possível sugerir temas agora.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="theme-suggester">
+      <button type="button" className="btn btn-secondary btn-small" onClick={suggest} disabled={busy}>
+        {busy ? <><span className="spinner" /> Pensando...</> : <><Icon name="spark" size={15} /> {options.length ? "Sugerir outros temas" : "Sugerir temas com IA"}</>}
+      </button>
+      {error && <div className="alert error">{error}</div>}
+      {options.length > 0 && (
+        <div className="theme-options">
+          {options.map((o) => (
+            <button type="button" key={o.tema} className="theme-chip" onClick={() => { onPick(o.tema); setOptions([]); }}>
+              <span>{o.eixo}</span>{o.tema}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -555,81 +636,416 @@ function CompetenceRow({ comp }) {
   return <article className="competence-row"><div className="comp-title"><span className="comp-code">C{comp.n}</span><div><b>{comp.nome}</b><p>{comp.comentario}</p></div><strong>{comp.nota}<small>/200</small></strong></div><div className="progress"><i style={{ width: `${pct}%` }} /></div></article>;
 }
 
-function History({ essays, onView, setPage }) {
+function History({ essays, onView, onToggleFav, setPage }) {
   const [query, setQuery] = useState("");
-  const filtered = useMemo(() => essays.filter((e) => (e.tema || "").toLowerCase().includes(query.toLowerCase())), [essays, query]);
+  const [onlyFav, setOnlyFav] = useState(false);
+  const favCount = essays.filter((e) => e.favorito).length;
+  const filtered = useMemo(
+    () => essays.filter((e) => (!onlyFav || e.favorito) && (e.tema || "").toLowerCase().includes(query.toLowerCase())),
+    [essays, query, onlyFav]
+  );
 
   return (
     <div className="history-page page-enter">
-      <section className="page-heading split"><div><span className="eyebrow"><Icon name="history" size={14} /> Sua trajetória</span><h1>Histórico de redações.</h1><p>Veja o que você já escreveu e como sua performance está mudando.</p></div><div className="history-summary"><b>{essays.length}</b><span>correções</span></div></section>
-      <div className="search-row"><div className="search-field"><Icon name="history" size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por tema..." /></div><button className="btn btn-primary" onClick={() => setPage("correct")}><Icon name="plus" size={17} /> Nova correção</button></div>
-      {!filtered.length ? <div className="card empty-state"><div className="empty-icon"><Icon name="history" size={24} /></div><h3>{essays.length ? "Nenhuma redação encontrada." : "Você ainda não tem correções."}</h3><p>{essays.length ? "Tente outro termo de busca." : "Sua primeira análise ficará registrada aqui."}</p>{!essays.length && <button className="btn btn-primary" onClick={() => setPage("correct")}>Começar agora</button>}</div> : <div className="history-list">{filtered.map((essay) => <HistoryRow key={essay.id} essay={essay} onClick={() => onView(essay)} />)}</div>}
+      <section className="page-heading split"><div><span className="eyebrow"><Icon name="history" size={14} /> Sua trajetória</span><h1>Histórico de redações.</h1><p>Abra qualquer redação para ver o texto, a nota e a análise. Favorite as melhores para exibi-las no seu perfil.</p></div><div className="history-summary"><b>{essays.length}</b><span>correções</span></div></section>
+      <div className="search-row">
+        <div className="search-field"><Icon name="history" size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por tema..." /></div>
+        <button className={`btn btn-secondary ${onlyFav ? "toggled" : ""}`} onClick={() => setOnlyFav((v) => !v)} aria-pressed={onlyFav}><Icon name="star" size={16} fill={onlyFav ? "currentColor" : "none"} /> Favoritas ({favCount})</button>
+        <button className="btn btn-primary" onClick={() => setPage("correct")}><Icon name="plus" size={17} /> Nova correção</button>
+      </div>
+      {!filtered.length ? <div className="card empty-state"><div className="empty-icon"><Icon name={onlyFav ? "star" : "history"} size={24} /></div><h3>{onlyFav ? "Nenhuma redação favorita ainda." : essays.length ? "Nenhuma redação encontrada." : "Você ainda não tem correções."}</h3><p>{onlyFav ? "Toque na estrela de uma redação para ela aparecer em Meus Destaques." : essays.length ? "Tente outro termo de busca." : "Sua primeira análise ficará registrada aqui."}</p>{!essays.length && <button className="btn btn-primary" onClick={() => setPage("correct")}>Começar agora</button>}</div> : <div className="history-list">{filtered.map((essay) => <HistoryRow key={essay.id} essay={essay} onClick={() => onView(essay)} onToggleFav={() => onToggleFav(essay)} />)}</div>}
     </div>
   );
 }
 
-function HistoryRow({ essay, onClick }) {
-  const meta = scoreMeta(Number(essay.notaTotal));
-  return <button className="history-row" onClick={onClick}><div className="history-score"><strong>{essay.notaTotal}</strong><span>/1000</span></div><div className="history-main"><span className={`tag ${meta.tone}`}>{meta.label}</span><h3>{essay.tema || "Sem tema"}</h3><p>{formatDate(essay.date)} · {essay.competencias.length} competências avaliadas</p></div><div className="history-comps">{essay.competencias.map((c) => <span key={c.n}>C{c.n} <b>{c.nota}</b></span>)}</div><Icon name="chevron" size={19} /></button>;
+function StarButton({ active, onClick, size = 18 }) {
+  const label = active ? "Remover dos favoritos" : "Favoritar redação";
+  return (
+    <button type="button" className={`star-btn ${active ? "active" : ""}`} onClick={(e) => { e.stopPropagation(); onClick(); }} aria-pressed={active} aria-label={label} title={label}>
+      <Icon name="star" size={size} fill={active ? "currentColor" : "none"} />
+    </button>
+  );
 }
 
-function LessonPlan({ essays, setPage }) {
-  const latest = essays[0];
-  const weakest = useMemo(() => {
-    if (!latest?.competencias?.length) return [];
-    return [...latest.competencias].sort((a, b) => a.nota - b.nota).slice(0, 3);
-  }, [latest]);
+function HistoryRow({ essay, onClick, onToggleFav }) {
+  const meta = scoreMeta(Number(essay.notaTotal));
+  return (
+    <div className="history-item">
+      <button className="history-row" onClick={onClick}><div className="history-score"><strong>{essay.notaTotal}</strong><span>/1000</span></div><div className="history-main"><span className={`tag ${meta.tone}`}>{meta.label}</span><h3>{essay.tema || "Sem tema"}</h3><p>{formatDate(essay.date)} · {essay.competencias.length} competências avaliadas</p></div><div className="history-comps">{essay.competencias.map((c) => <span key={c.n}>C{c.n} <b>{c.nota}</b></span>)}</div><Icon name="chevron" size={19} /></button>
+      <StarButton active={essay.favorito} onClick={onToggleFav} />
+    </div>
+  );
+}
 
-  const lessons = weakest.map((c, i) => ({
-    comp: c,
-    number: i + 1,
-    title: ["Base e precisão", "Construção de argumento", "Intervenção completa", "Conexão entre ideias"][i] || "Prática direcionada",
-    objective: c.nota < 120 ? "Reconstruir os fundamentos desta competência." : "Refinar a técnica para buscar uma faixa superior.",
-    activity: ["Faça 10 exercícios focados nos desvios mais frequentes e reescreva um parágrafo.", "Monte dois argumentos usando tese, evidência, explicação e consequência.", "Escreva três propostas e confira agente, ação, meio, efeito e detalhamento.", "Reescreva um parágrafo variando relações de causa, oposição, conclusão e adição."][c.n - 1] || "Pratique com uma redação anterior.",
-  }));
-
+function LessonPlan({ user, essays, onEssayUpdate, setPage }) {
+  const [tab, setTab] = useState("plan");
   return (
     <div className="lessons-page page-enter">
-      <section className="page-heading"><div><span className="eyebrow"><Icon name="book" size={14} /> Aprendizado adaptativo</span><h1>Plano de aulas.</h1><p>Uma trilha curta construída a partir do seu desempenho mais recente.</p></div></section>
-      {!latest ? (
-        <div className="card lesson-empty"><div className="empty-icon"><Icon name="book" size={25} /></div><h2>Seu plano ainda está em branco.</h2><p>Faça uma correção para o Revisô identificar quais competências merecem mais atenção.</p><button className="btn btn-primary" onClick={() => setPage("correct")}>Fazer primeira correção <Icon name="arrow" size={16} /></button></div>
-      ) : (
-        <>
-          <div className="plan-banner card"><div className="plan-banner-icon"><Icon name="spark" /></div><div><span className="eyebrow">Plano atualizado</span><h2>Seu foco desta semana</h2><p>Priorize as três competências com menor desempenho na sua última correção.</p></div></div>
-          <div className="lesson-list">{lessons.map((lesson) => <LessonCard key={lesson.comp.n} lesson={lesson} />)}</div>
-        </>
-      )}
+      <section className="page-heading"><div><span className="eyebrow"><Icon name="book" size={14} /> Aprendizado adaptativo</span><h1>Plano de aulas.</h1><p>Entenda sua redação como um todo, competência por competência, e estude o que realmente cai no ENEM.</p></div></section>
+      <div className="tabs" role="tablist">
+        {[["plan", "Meu plano"], ["repertorio", "Repertório ENEM"]].map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
+      {tab === "plan" ? <PlanTab user={user} essays={essays} onEssayUpdate={onEssayUpdate} setPage={setPage} /> : <RepertorioTab onNavigate={setPage} />}
     </div>
   );
 }
 
-function LessonCard({ lesson }) {
-  return <article className="lesson-card card"><div className="lesson-number">0{lesson.number}</div><div className="lesson-body"><div className="lesson-top"><span className="tag info">C{lesson.comp.n} · {lesson.comp.nota}/200</span><span className="lesson-duration">≈ 25 min</span></div><h2>{lesson.title}</h2><p className="lesson-objective"><b>Objetivo:</b> {lesson.objective}</p><div className="lesson-task"><span>Prática</span><p>{lesson.activity}</p></div></div><Icon name="chevron" size={21} /></article>;
+function PlanTab({ user, essays, onEssayUpdate, setPage }) {
+  const [pickedId, setPickedId] = useState(null);
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+  const essay = essays.find((e) => e.id === pickedId) || essays[0];
+
+  if (!essay) {
+    return <div className="card lesson-empty"><div className="empty-icon"><Icon name="book" size={25} /></div><h2>Seu plano ainda está em branco.</h2><p>Faça uma correção para a IA montar a análise geral e o plano por competência.</p><button className="btn btn-primary" onClick={() => setPage("correct")}>Fazer primeira correção <Icon name="arrow" size={16} /></button></div>;
+  }
+
+  async function generate(force = false) {
+    setStatus("loading");
+    setError("");
+    try {
+      const token = await user.getIdToken();
+      const plano = await requestApi(`/api/essays/${essay.id}/plan`, { method: "POST", body: JSON.stringify({ force }) }, token);
+      onEssayUpdate(essay.id, { plano });
+      setStatus("idle");
+    } catch (e) {
+      setError(e.message || "Não foi possível gerar o plano agora.");
+      setStatus("error");
+    }
+  }
+
+  const plano = essay.plano;
+  const lowest = plano ? [...plano.competencias].sort((a, b) => a.nota - b.nota).slice(0, 2).map((c) => c.n) : [];
+
+  return (
+    <>
+      <div className="plan-picker card">
+        <label className="field plain"><span>Redação analisada</span>
+          <select value={essay.id} onChange={(e) => { setPickedId(e.target.value); setStatus("idle"); setError(""); }}>
+            {essays.map((e) => <option key={e.id} value={e.id}>{formatDate(e.date)} · {e.notaTotal}/1000 · {(e.tema || "Sem tema").slice(0, 70)}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {!plano && (
+        <div className="card plan-cta">
+          <div className="plan-banner-icon"><Icon name="spark" /></div>
+          <div><h2>Gerar análise com IA</h2><p>A IA lê a redação inteira e devolve uma análise geral, e abaixo, a análise e o plano de melhoria de cada competência.</p>{!essay.texto && <p className="warning-text">Esta redação foi salva antes de o texto ser guardado. Corrija-a novamente para liberar o plano.</p>}</div>
+          <button className="btn btn-primary" onClick={() => generate(false)} disabled={status === "loading" || !essay.texto}>{status === "loading" ? <><span className="spinner" /> Analisando...</> : <><Icon name="spark" size={17} /> Gerar plano</>}</button>
+        </div>
+      )}
+      {status === "error" && <div className="alert error">{error}</div>}
+
+      {plano && (
+        <>
+          <section className="card plan-general">
+            <div className="section-head"><div><span className="eyebrow">Visão geral</span><h2>Análise geral da redação</h2></div><span className={`tag ${scoreMeta(essay.notaTotal).tone}`}>{essay.notaTotal}/1000</span></div>
+            <p>{plano.analiseGeral}</p>
+          </section>
+          <div className="section-head plan-section-title"><div><span className="eyebrow">Competência por competência</span><h2>Como melhorar cada uma</h2></div><button className="text-btn" onClick={() => generate(true)} disabled={status === "loading"}>{status === "loading" ? "Gerando..." : "Gerar novamente"}</button></div>
+          <div className="lesson-list">
+            {[...plano.competencias].sort((a, b) => a.n - b.n).map((c) => <CompetencePlan key={c.n} comp={c} priority={lowest.includes(c.n)} />)}
+          </div>
+        </>
+      )}
+    </>
+  );
 }
 
-function Profile({ user, essays }) {
+function CompetencePlan({ comp, priority }) {
+  const pct = Math.min(100, (Number(comp.nota) / 200) * 100);
+  return (
+    <article className="card comp-plan">
+      <div className="comp-plan-head"><span className="comp-code">C{comp.n}</span><div><b>{comp.nome || COMP_NAMES[comp.n]}</b>{priority && <span className="tag warning">Prioridade</span>}</div><strong>{comp.nota}<small>/200</small></strong></div>
+      <div className="progress"><i style={{ width: `${pct}%` }} /></div>
+      <p className="comp-plan-analysis">{comp.analise}</p>
+      <div className="comp-plan-how"><span>Como melhorar</span><ul className="clean-list">{comp.comoMelhorar.map((x, i) => <li key={i}><span className="list-dot positive"><Icon name="check" size={13} /></span>{x}</li>)}</ul></div>
+      <div className="lesson-task"><span>Exercício</span><p>{comp.exercicio}</p></div>
+    </article>
+  );
+}
+
+function RepertorioTab({ onNavigate }) {
+  const [section, setSection] = useState("temas");
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const match = (...parts) => !q || parts.flat().join(" ").toLowerCase().includes(q);
+
+  const temas = TEMAS_ANTERIORES.filter((t) => match(t.tema, t.eixo, String(t.ano)));
+  const eixos = EIXOS_PROVAVEIS.filter((e) => match(e.eixo, e.exemplos, e.dica));
+  const livros = LIVROS_AUTORES.filter((l) => match(l.nome, l.obra, l.area, l.ideia, l.serve));
+  const leis = LEIS_DOCUMENTOS.filter((l) => match(l.nome, l.ideia, l.serve));
+
+  const sections = [["temas", "Temas que já caíram", temas.length], ["eixos", "Eixos para estudar", eixos.length], ["livros", "Livros e autores", livros.length], ["leis", "Leis e documentos", leis.length]];
+
+  const ThemeActions = ({ tema }) => (
+    <div className="theme-actions">
+      <button className="text-btn" onClick={() => onNavigate("correct", tema)}><Icon name="pen" size={14} /> Escrever</button>
+      <button className="text-btn" onClick={() => onNavigate("support", tema)}><Icon name="library" size={14} /> Textos de apoio</button>
+    </div>
+  );
+
+  return (
+    <section className="repertorio">
+      <div className="search-row">
+        <div className="search-field"><Icon name="history" size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por tema, autor, livro ou assunto..." /></div>
+      </div>
+      <div className="subtabs">
+        {sections.map(([id, label, count]) => <button key={id} className={section === id ? "active" : ""} onClick={() => setSection(id)}>{label} <b>{count}</b></button>)}
+      </div>
+
+      {section === "temas" && (
+        <div className="rep-list">
+          {temas.map((t) => (
+            <article key={t.ano} className="card rep-card theme-row">
+              <span className="year-badge">{t.ano}</span>
+              <div><h3>{t.tema}</h3><span className="tag info">{t.eixo}</span></div>
+              <ThemeActions tema={t.tema} />
+            </article>
+          ))}
+        </div>
+      )}
+
+      {section === "eixos" && (
+        <>
+          <div className="alert info-note">Estes eixos são apostas de estudo baseadas em tendências, não previsões: o Inep não divulga o tema antes da prova. Use-os para ampliar repertório.</div>
+          <div className="rep-grid">
+            {eixos.map((e) => (
+              <article key={e.eixo} className="card rep-card">
+                <h3>{e.eixo}</h3><p className="muted">{e.dica}</p>
+                <ul className="example-list">{e.exemplos.map((ex) => <li key={ex}><span>{ex}</span><ThemeActions tema={ex} /></li>)}</ul>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+
+      {section === "livros" && (
+        <div className="rep-grid">
+          {livros.map((l) => (
+            <article key={l.nome + l.obra} className="card rep-card">
+              <span className="tag info">{l.area}</span>
+              <h3>{l.nome}</h3><p className="rep-work">{l.obra}</p><p>{l.ideia}</p>
+              <div className="chips">{l.serve.map((x) => <span key={x}>{x}</span>)}</div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {section === "leis" && (
+        <div className="rep-grid">
+          {leis.map((l) => (
+            <article key={l.nome} className="card rep-card">
+              <h3>{l.nome}</h3><p>{l.ideia}</p>
+              <div className="chips">{l.serve.map((x) => <span key={x}>{x}</span>)}</div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {((section === "temas" && !temas.length) || (section === "eixos" && !eixos.length) || (section === "livros" && !livros.length) || (section === "leis" && !leis.length)) && (
+        <div className="card empty-state"><h3>Nada encontrado.</h3><p>Tente outro termo de busca.</p></div>
+      )}
+    </section>
+  );
+}
+
+function Profile({ user, essays, onView, onToggleFav, setPage }) {
   const avg = averageScore(essays);
   const [name, setName] = useState(user.displayName || "");
   const [saved, setSaved] = useState(false);
+  const best = useMemo(
+    () => (essays.length ? [...essays].sort((a, b) => Number(b.notaTotal) - Number(a.notaTotal) || new Date(b.date) - new Date(a.date))[0] : null),
+    [essays]
+  );
+  const favorites = essays.filter((e) => e.favorito);
+
   async function save() {
     if (!auth || !name.trim()) return;
     await updateProfile(user, { displayName: name.trim() });
     setSaved(true);
     setTimeout(() => setSaved(false), 2200);
   }
+
   return (
     <div className="profile-page page-enter">
-      <section className="page-heading"><div><span className="eyebrow"><Icon name="user" size={14} /> Conta</span><h1>Meu perfil.</h1><p>Gerencie seus dados e veja um resumo da sua jornada no Revisô.</p></div></section>
+      <section className="page-heading"><div><span className="eyebrow"><Icon name="user" size={14} /> Conta</span><h1>Meu perfil.</h1><p>Gerencie seus dados, reveja sua melhor redação e seus destaques.</p></div></section>
       <div className="profile-grid">
         <section className="card profile-main"><div className="profile-hero"><div className="avatar huge">{initials(user)}</div><div><h2>{user.displayName || "Aluno Revisô"}</h2><p>{user.email}</p><span className="tag positive">Conta verificada</span></div></div><div className="divider" /><div className="profile-form"><label className="field plain"><span>Nome de exibição</span><input value={name} onChange={(e) => setName(e.target.value)} /></label><label className="field plain"><span>E-mail</span><input value={user.email || ""} disabled /></label><button className="btn btn-primary" onClick={save}>Salvar alterações</button>{saved && <span className="save-ok"><Icon name="check" size={15} /> Perfil atualizado.</span>}</div></section>
-        <aside className="card profile-stats"><span className="eyebrow">Sua jornada</span><div className="profile-stat"><b>{essays.length}</b><span>Redações analisadas</span></div><div className="profile-stat"><b>{avg || "—"}</b><span>Média geral</span></div><div className="profile-stat"><b>{essays.length ? Math.max(...essays.map((e) => Number(e.notaTotal || 0))) : "—"}</b><span>Melhor nota</span></div></aside>
+        <aside className="card profile-stats"><span className="eyebrow">Sua jornada</span><div className="profile-stat"><b>{essays.length}</b><span>Redações analisadas</span></div><div className="profile-stat"><b>{avg || "—"}</b><span>Média geral</span></div><div className="profile-stat"><b>{best ? best.notaTotal : "—"}</b><span>Melhor nota</span></div></aside>
       </div>
+
+      <section className="card best-essay">
+        <div className="section-head"><div><span className="eyebrow">Orgulho da jornada</span><h2>Minha melhor redação</h2></div>{best && <StarButton active={best.favorito} onClick={() => onToggleFav(best)} />}</div>
+        {best ? (
+          <div className="best-body">
+            <div className="best-score"><strong>{best.notaTotal}</strong><span>/ 1000</span><span className={`tag ${scoreMeta(Number(best.notaTotal)).tone}`}>{scoreMeta(Number(best.notaTotal)).label}</span></div>
+            <div className="best-main">
+              <h3>{best.tema || "Sem tema"}</h3>
+              <p className="muted">{formatDate(best.date)}</p>
+              <div className="history-comps">{best.competencias.map((c) => <span key={c.n}>C{c.n} <b>{c.nota}</b></span>)}</div>
+              {best.geral && <p className="best-analysis"><b>Análise:</b> {best.geral}</p>}
+              {best.texto ? <blockquote className="essay-excerpt">{best.texto.length > 520 ? `${best.texto.slice(0, 520).trim()}…` : best.texto}</blockquote> : <p className="muted">O texto desta redação não foi guardado (ela é anterior à atualização).</p>}
+              <button className="btn btn-secondary" onClick={() => onView(best)}>Ver redação e análise completas</button>
+            </div>
+          </div>
+        ) : (
+          <div className="empty-state compact"><h3>Sua melhor redação aparece aqui.</h3><p>Faça sua primeira correção.</p><button className="btn btn-primary" onClick={() => setPage("correct")}>Corrigir redação</button></div>
+        )}
+      </section>
+
+      <section className="card highlights">
+        <div className="section-head"><div><span className="eyebrow">Favoritas</span><h2>Meus Destaques</h2></div><button className="text-btn" onClick={() => setPage("history")}>Gerenciar no histórico <Icon name="arrow" size={15} /></button></div>
+        {favorites.length ? (
+          <div className="history-list">{favorites.map((e) => <HistoryRow key={e.id} essay={e} onClick={() => onView(e)} onToggleFav={() => onToggleFav(e)} />)}</div>
+        ) : (
+          <div className="empty-state compact"><div className="empty-icon"><Icon name="star" size={22} /></div><h3>Você ainda não tem destaques.</h3><p>No Histórico, toque na estrela das redações que quiser guardar aqui.</p><button className="btn btn-secondary" onClick={() => setPage("history")}>Ir para o histórico</button></div>
+        )}
+      </section>
     </div>
   );
 }
 
-function EssayModal({ essay, onClose }) {
-  return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><article className="modal"><div className="modal-head"><div><span className="eyebrow">Detalhes da correção</span><h2>{essay.tema || "Sem tema"}</h2><p>{formatDate(essay.date)}</p></div><button className="icon-btn" onClick={onClose}><Icon name="close" /></button></div><div className="modal-score"><strong>{essay.notaTotal}</strong><span>/ 1000</span></div><div className="modal-comps">{essay.competencias.map((c) => <CompetenceRow key={c.n} comp={c} />)}</div><div className="diagnosis-card compact"><span className="eyebrow">Diagnóstico</span><p>{essay.geral}</p></div></article></div>;
+function EssayModal({ essay, onClose, onToggleFav }) {
+  const [view, setView] = useState("analise");
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <article className="modal">
+        <div className="modal-head">
+          <div><span className="eyebrow">Detalhes da correção</span><h2>{essay.tema || "Sem tema"}</h2><p>{formatDate(essay.date)}</p></div>
+          <div className="modal-actions"><StarButton active={essay.favorito} onClick={() => onToggleFav(essay)} /><button className="icon-btn" onClick={onClose} aria-label="Fechar"><Icon name="close" /></button></div>
+        </div>
+        <div className="modal-score"><strong>{essay.notaTotal}</strong><span>/ 1000</span></div>
+        <div className="tabs compact" role="tablist">
+          {[["analise", "Nota e análise"], ["texto", "Redação"]].map(([id, label]) => <button key={id} role="tab" aria-selected={view === id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}
+        </div>
+        {view === "analise" ? (
+          <>
+            <div className="modal-comps">{essay.competencias.map((c) => <CompetenceRow key={c.n} comp={c} />)}</div>
+            <div className="diagnosis-card compact"><span className="eyebrow">Diagnóstico</span><p>{essay.geral}</p></div>
+            {(essay.positivos.length > 0 || essay.melhorar.length > 0) && (
+              <div className="result-columns modal-columns">
+                <div><span className="eyebrow">Pontos fortes</span><ul className="clean-list">{essay.positivos.map((x, i) => <li key={i}><span className="list-dot positive"><Icon name="check" size={13} /></span>{x}</li>)}</ul></div>
+                <div><span className="eyebrow">O que melhorar</span><ul className="clean-list">{essay.melhorar.map((x, i) => <li key={i}><span className="list-dot warning">!</span>{x}</li>)}</ul></div>
+              </div>
+            )}
+          </>
+        ) : essay.texto ? (
+          <div className="essay-text">{essay.texto}</div>
+        ) : (
+          <div className="alert info-note">O texto desta redação não foi guardado, pois ela é anterior à atualização. As novas correções já guardam o texto.</div>
+        )}
+      </article>
+    </div>
+  );
 }
+
+const TIPO_APOIO = { noticia: "Notícia", grafico: "Gráfico / infográfico", literario: "Texto literário", legislacao: "Legislação", dados: "Dados de pesquisa" };
+
+function SupportTexts({ user, initialTema = "", onNavigate }) {
+  const [tema, setTema] = useState(initialTema);
+  const [items, setItems] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+  const [openId, setOpenId] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const data = await requestApi("/api/support-texts", {}, token);
+        if (active) setItems(Array.isArray(data) ? data : []);
+      } catch {
+        if (active) setItems([]);
+      } finally {
+        if (active) setLoadingList(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [user]);
+
+  async function generate() {
+    setStatus("loading");
+    setError("");
+    try {
+      const token = await user.getIdToken();
+      const item = await requestApi("/api/support-texts", { method: "POST", body: JSON.stringify({ tema: tema.trim() }) }, token);
+      setItems((prev) => [item, ...prev]);
+      setOpenId(item.id);
+      setStatus("idle");
+    } catch (e) {
+      setError(e.message || "Não foi possível gerar os textos agora.");
+      setStatus("error");
+    }
+  }
+
+  async function remove(id) {
+    const previous = items;
+    setItems((prev) => prev.filter((x) => x.id !== id));
+    try {
+      const token = await user.getIdToken();
+      await requestApi(`/api/support-texts/${id}`, { method: "DELETE" }, token);
+    } catch {
+      setItems(previous);
+    }
+  }
+
+  return (
+    <div className="support-page page-enter">
+      <section className="page-heading"><div><span className="eyebrow"><Icon name="library" size={14} /> Coletânea de apoio</span><h1>Textos de apoio.</h1><p>Informe um tema e receba de 3 a 4 textos motivadores (notícia, dados, texto literário, legislação) para entender o assunto antes de escrever.</p></div></section>
+
+      <section className="card support-form">
+        <label className="field plain"><span>Tema</span><input value={tema} onChange={(e) => setTema(e.target.value)} placeholder="Escreva seu tema ou peça uma sugestão" /></label>
+        <ThemeSuggester user={user} onPick={setTema} />
+        <div className="support-actions">
+          <button className="btn btn-primary" onClick={generate} disabled={status === "loading" || tema.trim().length < 8}>{status === "loading" ? <><span className="spinner" /> Gerando textos...</> : <><Icon name="spark" size={17} /> Gerar textos de apoio</>}</button>
+          {tema.trim().length >= 8 && <button className="btn btn-ghost" onClick={() => onNavigate("correct", tema.trim())}><Icon name="pen" size={16} /> Escrever sobre este tema</button>}
+        </div>
+        {status === "error" && <div className="alert error">{error}</div>}
+        <p className="support-note">Os textos são gerados por IA para treino e podem conter dados ilustrativos. Não os cite como fontes reais na prova.</p>
+      </section>
+
+      <div className="section-head plan-section-title"><div><span className="eyebrow">Salvos automaticamente</span><h2>Meus textos de apoio</h2></div></div>
+      {loadingList ? <div className="card empty-state compact"><span className="spinner small" /></div> : !items.length ? (
+        <div className="card empty-state compact"><div className="empty-icon"><Icon name="library" size={22} /></div><h3>Nenhuma coletânea ainda.</h3><p>Gere sua primeira coletânea acima. Ela ficará guardada aqui.</p></div>
+      ) : (
+        <div className="support-list">
+          {items.map((item) => {
+            const open = openId === item.id;
+            return (
+              <article key={item.id} className="card support-item">
+                <div className="support-item-head">
+                  <button className="support-toggle" onClick={() => setOpenId(open ? null : item.id)} aria-expanded={open}>
+                    <div><b>{item.tema}</b><small>{formatDate(item.createdAt)} · {item.textos.length} textos</small></div>
+                    <Icon name="chevron" size={18} className={open ? "rot" : ""} />
+                  </button>
+                  <button className="icon-btn" onClick={() => remove(item.id)} aria-label="Excluir coletânea" title="Excluir"><Icon name="trash" size={18} /></button>
+                </div>
+                {open && (
+                  <div className="support-body">
+                    {item.textos.map((t, i) => (
+                      <section key={i} className="support-text">
+                        <span className="tag info">{TIPO_APOIO[t.tipo] || "Texto de apoio"} · Texto {i + 1}</span>
+                        <h3>{t.titulo}</h3>
+                        <p>{t.conteudo}</p>
+                        <small>{t.fonte}</small>
+                      </section>
+                    ))}
+                    <button className="btn btn-secondary" onClick={() => onNavigate("correct", item.tema)}><Icon name="pen" size={16} /> Escrever redação sobre este tema</button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default App;
