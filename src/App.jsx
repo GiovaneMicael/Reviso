@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider, configured } from "./lib/firebase";
 import { requestApi } from "./lib/api";
+import { useTheme, setTheme } from "./lib/theme";
 import Icon from "./components/Icon";
 import { TEMAS_ANTERIORES, EIXOS_PROVAVEIS, LIVROS_AUTORES, LEIS_DOCUMENTOS } from "./data/repertorio";
 import "./App.css";
@@ -204,6 +205,7 @@ function App() {
           )}
           {page === "lessons" && <LessonPlan user={user} essays={essays} onEssayUpdate={updateEssay} setPage={navigate} />}
           {page === "support" && <SupportTexts key={draftTema} user={user} initialTema={draftTema} onNavigate={navigate} />}
+          {page === "settings" && <Settings user={user} />}
           {page === "profile" && <Profile user={user} essays={essays} onView={(e) => setSelectedId(e.id)} onToggleFav={toggleFavorite} setPage={navigate} />}
         </div>
       </main>
@@ -407,6 +409,7 @@ function Sidebar({ page, setPage, user, onLogout, open, setOpen }) {
     ["history", "Histórico"],
     ["lessons", "Plano de aulas"],
     ["support", "Textos de apoio"],
+    ["settings", "Configurações"],
   ];
   return (
     <>
@@ -421,7 +424,7 @@ function Sidebar({ page, setPage, user, onLogout, open, setOpen }) {
           <span className="nav-label">Workspace</span>
           {primary.map(([id, label]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
-              <Icon name={{ correct: "pen", support: "library" }[id] || id} size={19} /> <span>{label}</span>
+              <Icon name={{ correct: "pen", support: "library", settings: "settings" }[id] || id} size={19} /> <span>{label}</span>
             </button>
           ))}
         </nav>
@@ -439,7 +442,7 @@ function Sidebar({ page, setPage, user, onLogout, open, setOpen }) {
 }
 
 function Topbar({ page, user, onMenu, onProfile }) {
-  const titles = { home: "Visão geral", correct: "Corrigir redação", history: "Histórico", lessons: "Plano de aulas", support: "Textos de apoio", profile: "Meu perfil" };
+  const titles = { home: "Visão geral", correct: "Corrigir redação", history: "Histórico", lessons: "Plano de aulas", support: "Textos de apoio", settings: "Configurações", profile: "Meu perfil" };
   return (
     <header className="topbar">
       <button className="icon-btn menu-btn" onClick={onMenu}><Icon name="menu" /></button>
@@ -1047,5 +1050,111 @@ function SupportTexts({ user, initialTema = "", onNavigate }) {
   );
 }
 
+
+const SUPPORT_EMAIL = "suporte.reviso@gmail.com";
+const WHATSAPP_DISPLAY = "(19) 92015-3237";
+const WHATSAPP_LINK = "https://wa.me/5519920153237?text=" + encodeURIComponent("Olá! Preciso de ajuda com o Revisô AI.");
+const BUG_SCREENS = ["Início", "Corrigir redação", "Histórico", "Plano de aulas", "Textos de apoio", "Perfil", "Login/cadastro", "Outra"];
+
+function mailtoBug({ titulo, tela, descricao, email }) {
+  const body = `Tela: ${tela}\nUsuário: ${email || "não informado"}\nDispositivo: ${navigator.userAgent}\n\n${descricao}`.slice(0, 1500);
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`[Bug] ${titulo || "Relato de problema"}`)}&body=${encodeURIComponent(body)}`;
+}
+
+function Settings({ user }) {
+  const [theme] = useTheme();
+  const [form, setForm] = useState({ tela: BUG_SCREENS[0], titulo: "", descricao: "" });
+  const [status, setStatus] = useState("idle");
+  const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const valid = form.titulo.trim().length >= 5 && form.descricao.trim().length >= 20;
+  const mailto = mailtoBug({ ...form, email: user.email });
+
+  async function sendBug(e) {
+    e.preventDefault();
+    if (!valid) return;
+    setStatus("loading");
+    setMessage("");
+    try {
+      const token = await user.getIdToken();
+      await requestApi("/api/support/bug", { method: "POST", body: JSON.stringify({ ...form, dispositivo: navigator.userAgent }) }, token);
+      setStatus("success");
+      setMessage("Relato enviado para a equipe. Obrigado por ajudar a melhorar o Revisô!");
+      setForm((f) => ({ ...f, titulo: "", descricao: "" }));
+    } catch (error) {
+      if (error.status === 501 || !error.status) {
+        // Servidor sem SMTP (ou fora do ar): abre o e-mail do aluno já preenchido.
+        window.location.href = mailto;
+        setStatus("info");
+        setMessage("Abrimos seu aplicativo de e-mail com o relato pronto. É só enviar.");
+      } else {
+        setStatus("error");
+        setMessage(error.message);
+      }
+    }
+  }
+
+  async function copyNumber() {
+    try {
+      await navigator.clipboard.writeText(WHATSAPP_DISPLAY);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* área de transferência indisponível */ }
+  }
+
+  return (
+    <div className="settings-page page-enter">
+      <section className="page-heading"><div><span className="eyebrow"><Icon name="settings" size={14} /> Preferências</span><h1>Configurações.</h1><p>Ajuste a aparência do Revisô e fale com a nossa equipe quando precisar.</p></div></section>
+
+      <section className="card settings-section">
+        <header><span className="eyebrow">Modo de tela</span><h2>Tema</h2><p>Escolha entre o modo claro e o modo escuro. A preferência fica salva neste dispositivo.</p></header>
+        <div className="theme-options-row">
+          {[["light", "Modo claro", "sun"], ["dark", "Modo escuro", "moon"]].map(([id, label, icon]) => (
+            <button key={id} type="button" className={`theme-card ${id}`} aria-pressed={theme === id} onClick={() => setTheme(id)}>
+              <div className="preview" aria-hidden="true"><i /><div><i /><i /></div></div>
+              <span className="label"><Icon name={icon} size={18} /> {label}{theme === id && <small>Ativo</small>}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="card settings-section">
+        <header><span className="eyebrow">Suporte</span><h2>Precisa de ajuda?</h2><p>Relate um problema ou fale com a gente pelo WhatsApp.</p></header>
+        <div className="settings-grid">
+          <div className="support-box">
+            <h3><Icon name="chat" size={18} /> Central de ajuda</h3>
+            <p>Atendimento pelo WhatsApp:</p>
+            <span className="wa-number">{WHATSAPP_DISPLAY}</span>
+            <div className="bug-actions">
+              <a className="btn btn-whatsapp" href={WHATSAPP_LINK} target="_blank" rel="noopener noreferrer"><Icon name="chat" size={16} /> Abrir WhatsApp</a>
+              <button type="button" className="btn btn-secondary" onClick={copyNumber}><Icon name={copied ? "check" : "copy"} size={16} /> {copied ? "Copiado" : "Copiar número"}</button>
+            </div>
+            <div className="faq">
+              <details><summary>Como favorito uma redação?</summary><p>No Histórico, toque na estrela da redação. Ela passa a aparecer em Meus Destaques, no seu perfil.</p></details>
+              <details><summary>Como gero o plano de aulas?</summary><p>Em Plano de aulas, escolha a redação e toque em Gerar plano. Ele fica salvo para você rever depois.</p></details>
+              <details><summary>Posso escrever meu próprio tema?</summary><p>Sim. Em Corrigir redação, digite o tema que quiser. A sugestão por IA é opcional.</p></details>
+              <details><summary>Os textos de apoio são fontes reais?</summary><p>Não. Eles são gerados por IA para treino e podem ter dados ilustrativos. Não cite como fonte na prova.</p></details>
+            </div>
+          </div>
+
+          <form className="support-box" onSubmit={sendBug}>
+            <h3><Icon name="bug" size={18} /> Relatar um bug</h3>
+            <p>O relato é enviado por e-mail para {SUPPORT_EMAIL}.</p>
+            <label className="field plain"><span>Onde aconteceu?</span><select value={form.tela} onChange={set("tela")}>{BUG_SCREENS.map((t) => <option key={t}>{t}</option>)}</select></label>
+            <label className="field plain"><span>Título</span><input value={form.titulo} onChange={set("titulo")} maxLength={120} placeholder="Ex.: A nota não aparece no histórico" /></label>
+            <label className="field plain"><span>O que aconteceu?</span><textarea value={form.descricao} onChange={set("descricao")} maxLength={3000} placeholder="Descreva o que você fez, o que esperava e o que aconteceu (mínimo 20 caracteres)." /></label>
+            <div className="bug-actions">
+              <button className="btn btn-primary" disabled={!valid || status === "loading"}>{status === "loading" ? <><span className="spinner" /> Enviando...</> : <><Icon name="mail" size={16} /> Enviar relato</>}</button>
+              <a className="text-btn" href={mailto}>Abrir no meu e-mail</a>
+            </div>
+            {message && <div className={`alert ${status === "success" ? "success" : status === "error" ? "error" : "info-note"}`} role="status">{message}</div>}
+          </form>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 export default App;

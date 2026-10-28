@@ -263,6 +263,61 @@ app.delete("/api/support-texts/:id", requireAuth, async (req, res) => {
   }
 });
 
+
+// ---- Suporte: relato de bugs por e-mail (SMTP) ----
+const bugHits = new Map();
+const cleanLine = (value = "", max = 200) => String(value).replace(/\s+/g, " ").trim().slice(0, max);
+
+app.post("/api/support/bug", requireAuth, async (req, res) => {
+  const titulo = cleanLine(req.body?.titulo, 120);
+  const tela = cleanLine(req.body?.tela, 60);
+  const dispositivo = cleanLine(req.body?.dispositivo, 300);
+  const descricao = String(req.body?.descricao || "").trim().slice(0, 3000);
+
+  if (titulo.length < 5) return res.status(400).json({ error: "Dê um título ao problema (mínimo 5 caracteres)." });
+  if (descricao.length < 20) return res.status(400).json({ error: "Descreva o problema com pelo menos 20 caracteres." });
+
+  // limite simples: 3 relatos a cada 10 minutos por usuário
+  const now = Date.now();
+  const recent = (bugHits.get(req.user.uid) || []).filter((t) => now - t < 10 * 60 * 1000);
+  if (recent.length >= 3) return res.status(429).json({ error: "Você enviou muitos relatos agora há pouco. Tente novamente em alguns minutos." });
+
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return res.status(501).json({ error: "O envio automático de e-mail ainda não está configurado no servidor." });
+  }
+
+  try {
+    const nodemailer = (await import("nodemailer")).default;
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: Number(process.env.SMTP_PORT || 465),
+      secure: Number(process.env.SMTP_PORT || 465) === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+
+    await transporter.sendMail({
+      from: `"Revisô AI" <${process.env.SMTP_USER}>`,
+      to: process.env.SUPPORT_TO || "suporte.reviso@gmail.com",
+      replyTo: req.user.email || undefined,
+      subject: `[Bug] ${titulo}`,
+      text: [
+        `Usuário: ${req.user.email || "sem e-mail"} (uid ${req.user.uid})`,
+        `Tela: ${tela || "não informada"}`,
+        `Dispositivo: ${dispositivo || "não informado"}`,
+        `Enviado em: ${new Date().toISOString()}`,
+        "",
+        descricao,
+      ].join("\n"),
+    });
+
+    bugHits.set(req.user.uid, [...recent, now]);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Falha ao enviar e-mail de suporte:", error.message);
+    return res.status(502).json({ error: "Não foi possível enviar o e-mail agora." });
+  }
+});
+
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.resolve(__dirname, "../dist")));
   app.get("/{*splat}", (_req, res) => res.sendFile(path.resolve(__dirname, "../dist/index.html")));
