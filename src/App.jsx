@@ -424,7 +424,7 @@ function Sidebar({ page, setPage, user, onLogout, open, setOpen }) {
           <span className="nav-label">Workspace</span>
           {primary.map(([id, label]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
-              <Icon name={{ correct: "pen", support: "library", settings: "settings" }[id] || id} size={19} /> <span>{label}</span>
+              <Icon name={{ correct: "pen", lessons: "book", support: "library", settings: "settings" }[id] || id} size={19} /> <span>{label}</span>
             </button>
           ))}
         </nav>
