@@ -15,7 +15,7 @@
   --border: #e9e3f0;
   --primary: #6d3fd4;
   --primary-2: #845be5;
-  --primary-soft: #f0eaff;
+  --primary-soft: #f0eaffbd;
   --dark: #211c2b;
   --success: #16866a;
   --success-bg: #e8f7f1;
@@ -137,7 +137,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
 .auth-foot { position: absolute; bottom: 18px; color: var(--muted-2); font-size: .68rem; display: flex; gap: 6px; align-items: center; }
 
 .app-shell { min-height: 100vh; }
-.sidebar { width: var(--sidebar); position: fixed; inset: 0 auto 0 0; background: rgba(255, 255, 255, 0.717); border-right: 1px solid var(--border); backdrop-filter: blur(18px); padding: 24px 16px 17px; display: flex; flex-direction: column; z-index: 50; }
+.sidebar { width: var(--sidebar); position: fixed; inset: 0 auto 0 0; background: rgba(243, 218, 255, 0.728); border-right: 1px solid var(--border); backdrop-filter: blur(18px); padding: 24px 16px 17px; display: flex; flex-direction: column; z-index: 50; }
 .sidebar-top { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 27px; }
 .mobile-close { display: none; }
 .new-correction { width: 100%; border: 0; min-height: 44px; border-radius: 12px; color: white; background: var(--dark); display: flex; align-items: center; gap: 9px; padding: 0 13px; font-weight: 700; box-shadow: 0 8px 20px rgba(43,33,64,.13); }
