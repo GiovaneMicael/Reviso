@@ -9,7 +9,7 @@
   --bg: #f7f5fb;
   --surface: #ffffff;
   --surface-soft: #fbfaff;
-  --text: #4c3b62;
+  --text: #7d5ba9;
   --muted: #777085;
   --muted-2: #a39aaa;
   --border: #e9e3f0;
@@ -137,7 +137,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
 .auth-foot { position: absolute; bottom: 18px; color: var(--muted-2); font-size: .68rem; display: flex; gap: 6px; align-items: center; }
 
 .app-shell { min-height: 100vh; }
-.sidebar { width: var(--sidebar); position: fixed; inset: 0 auto 0 0; background: rgba(255,255,255,.84); border-right: 1px solid var(--border); backdrop-filter: blur(18px); padding: 24px 16px 17px; display: flex; flex-direction: column; z-index: 50; }
+.sidebar { width: var(--sidebar); position: fixed; inset: 0 auto 0 0; background: rgba(255, 255, 255, 0.717); border-right: 1px solid var(--border); backdrop-filter: blur(18px); padding: 24px 16px 17px; display: flex; flex-direction: column; z-index: 50; }
 .sidebar-top { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 27px; }
 .mobile-close { display: none; }
 .new-correction { width: 100%; border: 0; min-height: 44px; border-radius: 12px; color: white; background: var(--dark); display: flex; align-items: center; gap: 9px; padding: 0 13px; font-weight: 700; box-shadow: 0 8px 20px rgba(43,33,64,.13); }
@@ -351,7 +351,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
 }
 @media (max-width: 800px) {
   :root { --sidebar: 265px; }
-  .sidebar { transform: translateX(-105%); transition: transform .25s ease; box-shadow: 15px 0 40px rgba(79, 54, 114, 0.336); }
+  .sidebar { transform: translateX(-105%); transition: transform .25s ease; box-shadow: 15px 0 40px rgba(87, 59, 126, 0.578); }
   .sidebar.open { transform: translateX(0); }
   .mobile-close,.menu-btn { display: grid; }
   .mobile-overlay.visible { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(30,20,45,.35); }
