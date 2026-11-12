@@ -9,7 +9,7 @@
   --bg: #f7f5fb;
   --surface: #ffffff;
   --surface-soft: #fbfaff;
-  --text: #37264c;
+  --text: #4c3b62;
   --muted: #777085;
   --muted-2: #a39aaa;
   --border: #e9e3f0;
@@ -351,7 +351,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
 }
 @media (max-width: 800px) {
   :root { --sidebar: 265px; }
-  .sidebar { transform: translateX(-105%); transition: transform .25s ease; box-shadow: 15px 0 40px rgba(30,20,45,.12); }
+  .sidebar { transform: translateX(-105%); transition: transform .25s ease; box-shadow: 15px 0 40px rgba(79, 54, 114, 0.336); }
   .sidebar.open { transform: translateX(0); }
   .mobile-close,.menu-btn { display: grid; }
   .mobile-overlay.visible { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(30,20,45,.35); }
