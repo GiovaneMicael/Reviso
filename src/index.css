@@ -143,10 +143,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px s
 .new-correction { width: 100%; border: 0; min-height: 44px; border-radius: 12px; color: white; background: var(--dark); display: flex; align-items: center; gap: 9px; padding: 0 13px; font-weight: 700; box-shadow: 0 8px 20px rgba(43,33,64,.13); }
 .new-correction span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: rgba(255,255,255,.12); }
 .side-nav { margin-top: 27px; display: grid; gap: 4px; }
-.nav-label { color: #aaa1b5; text-transform: uppercase; letter-spacing: .12em; font-size: .61rem; font-weight: 700; padding: 0 11px 7px; }
+.nav-label { color: #a690c0; text-transform: uppercase; letter-spacing: .12em; font-size: .61rem; font-weight: 700; padding: 0 11px 7px; }
 .nav-label.account { margin-top: 19px; }
 .side-nav button { border: 0; background: transparent; color: var(--muted); min-height: 43px; padding: 0 11px; border-radius: 11px; display: flex; align-items: center; gap: 11px; text-align: left; font-weight: 600; font-size: .79rem; }
-.side-nav button:hover { background: #f5f1fa; color: var(--dark); }
+.side-nav button:hover { background: #f5f1faac; color: var(--dark); }
 .side-nav button.active { background: var(--primary-soft); color: var(--primary); }
 .sidebar-bottom { margin-top: auto; border-top: 1px solid var(--border); padding-top: 15px; }
 .profile-mini { width: 100%; display: grid; grid-template-columns: 32px 1fr 15px; gap: 9px; align-items: center; border: 0; background: transparent; text-align: left; padding: 7px 6px; border-radius: 10px; }
