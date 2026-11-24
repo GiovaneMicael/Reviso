@@ -13,9 +13,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@genkit-ai/google-genai": "^1.42.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
+    "emailjs": "^5.0.5",
     "express": "^5.2.1",
     "firebase": "^12.18.0",
     "firebase-admin": "^13.5.0",

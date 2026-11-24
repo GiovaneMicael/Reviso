@@ -107,3 +107,30 @@ Configure:
 - `VITE_API_URL` no build, se frontend e backend forem hospedados separadamente
 
 Antes de abrir a plataforma publicamente, adicione rate limiting, logs estruturados sem texto de redação, monitoramento e política de retenção de dados.
+
+## Relatos de problemas por e-mail (EmailJS)
+
+O formulário "Relatar um problema" (Configurações) envia o e-mail direto do navegador via [EmailJS](https://www.emailjs.com/), sem SMTP no servidor.
+
+1. Em **Email Services**, conecte seu Gmail/Outlook e copie o **Service ID**.
+2. Em **Email Templates**, crie um template com **To Email** = seu e-mail de suporte, **Reply To** = `{{reply_to}}` e Subject `[Bug] {{title}}`. Corpo sugerido:
+
+```
+Usuário: {{user_email}} (uid {{user_uid}})
+Tela: {{screen}}
+Dispositivo: {{device}}
+Enviado em: {{sent_at}}
+
+{{message}}
+```
+
+3. Em **Account**, copie a **Public Key**.
+4. Defina no `.env` (e nas *Variables* do GitHub/Vercel para produção):
+
+```
+VITE_EMAILJS_SERVICE_ID=service_xxxxxxx
+VITE_EMAILJS_TEMPLATE_ID=template_xxxxxxx
+VITE_EMAILJS_PUBLIC_KEY=xxxxxxxxxxxxxxx
+```
+
+Sem essas variáveis, o app abre o aplicativo de e-mail do usuário (`mailto:`) como alternativa. Em **Account → Security** do EmailJS, restrinja os domínios permitidos para evitar abuso da Public Key.

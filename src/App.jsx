@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider, configured } from "./lib/firebase";
 import { requestApi } from "./lib/api";
+import { sendBugReport } from "./lib/email";
 import { useTheme } from "./lib/theme";
 import Icon from "./components/Icon";
 import { TEMAS_ANTERIORES, EIXOS_PROVAVEIS, LIVROS_AUTORES, LEIS_DOCUMENTOS } from "./data/repertorio";
@@ -1079,13 +1080,12 @@ function Settings({ user }) {
     setStatus("loading");
     setMessage("");
     try {
-      const token = await user.getIdToken();
-      await requestApi("/api/support/bug", { method: "POST", body: JSON.stringify({ ...form, dispositivo: navigator.userAgent }) }, token);
+      await sendBugReport({ ...form, user });
       setStatus("success");
       setMessage("Relato enviado para a equipe. Obrigado por ajudar a melhorar o Revisô!");
       setForm((f) => ({ ...f, titulo: "", descricao: "" }));
     } catch (error) {
-      if (error.status === 501 || !error.status) {
+      if (error.code === "not_configured") {
         window.location.href = mailto;
         setStatus("info");
         setMessage("Abrimos seu aplicativo de e-mail com o relato pronto. É só enviar.");
